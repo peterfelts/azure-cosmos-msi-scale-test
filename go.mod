@@ -1,6 +1,8 @@
 module github.com/peterfelts/azure-cosmos-msi-scale-test
 
-go 1.24.11
+go 1.23.0
+
+toolchain go1.24.11
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
