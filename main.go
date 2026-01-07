@@ -110,7 +110,7 @@ func performCosmosOperation(accountURL, tableName string) error {
 	serviceClient, err := aztables.NewServiceClient(accountURL, cred, nil)
 	if err != nil {
 		log.Printf("Failed to create service client: %v", err)
-		authErrorCounter.Inc()
+		otherErrorCounter.Inc()
 		return fmt.Errorf("failed to create service client: %w", err)
 	}
 

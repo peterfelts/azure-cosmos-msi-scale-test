@@ -64,7 +64,7 @@ resource cosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssi
   parent: cosmosAccount
   name: guid(managedIdentity.id, cosmosAccount.id, 'contributor')
   properties: {
-    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
+    roleDefinitionId: '${cosmosAccount.id}/tableRoleDefinitions/00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
     principalId: managedIdentity.properties.principalId
     scope: cosmosAccount.id
   }
@@ -75,7 +75,10 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   name: aksClusterName
   location: location
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${managedIdentity.id}': {}
+    }
   }
   properties: {
     dnsPrefix: aksClusterName
