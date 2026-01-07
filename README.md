@@ -1,17 +1,80 @@
 ## Purpose
 The goal of this project is to perform scale testing of Azure MSI-based authentication to an Azure Cosmos DB account.
 
+## Quick Start
+
+To deploy the complete solution to Azure:
+
+```bash
+./deploy.sh --subscription-id "your-subscription-id"
+```
+
+For detailed instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## Architecture
+
+- **Go Application**: Authenticates to Cosmos DB using Managed Identity and performs table operations
+- **Azure Container Registry**: Stores the containerized application
+- **Azure Cosmos DB**: Table API account for testing
+- **AKS Cluster**: Runs the application with Azure Overlay Networking
+- **Managed Identity**: Provides secure authentication
+- **Prometheus Metrics**: Exposes success/failure metrics
+
 ## Requirements
-Go 1.23 or newer
-Azure AzTables SDK for Go using MSI authentication to authenticate to Cosmos
-AKS cluster using Azure Overlay Networking
-One pod per node
-AKS cluster can be scaled to any number of nodes
-Each pod uses MSI auth to connect to an Azure Cosmos DB account 
-After establishing a connection to the Cosmos account, the Go application will perform a table-creation operation. Cosmos will return an error if the table already exists. If the error is related to not being authorized, an error metric will be published. If table creation succeeds (or fails because the table already exists) a success metric will be published.
-Metrics will be aggregated and can be viewed to get wholistic view of how many pods succeeded in connecting to Cosmos and did or did not receive an authentication error.
-The NewManagedIdentityCredential API will be used to create a token credential to be used with the NewServiceClient to create a Cosmos service client, in the Go application
-Create a CLI command that can be used to deploy all resources to an Azure subscription (subscription ID will be provided as an argument to the CLI)
+- Go 1.23 or newer
+- Docker
+- Azure CLI (`az`)
+- kubectl
+- jq
+- Active Azure subscription
+
+## Key Features
+
+- **MSI Authentication**: Uses Azure Managed Identity for secure, credential-less authentication
+- **Scale Testing**: DaemonSet deployment ensures one pod per node for testing at scale
+- **Metrics Collection**: Prometheus metrics track authentication success/failures
+- **Automated Deployment**: Single command deploys all infrastructure and application
+- **Production-Ready**: Includes health checks, resource limits, and proper error handling
+
+## Metrics
+
+The application exposes these Prometheus metrics at `/metrics`:
+- `cosmos_connection_success_total`: Successful Cosmos DB operations
+- `cosmos_auth_error_total`: Authentication/authorization errors
+- `cosmos_other_error_total`: Other errors
+
+## Usage
+
+### Deploy
+```bash
+./deploy.sh --subscription-id "your-subscription-id" \
+  --resource-group "my-rg" \
+  --location "westus2" \
+  --node-count 5
+```
+
+### View Metrics
+```bash
+kubectl port-forward service/cosmos-msi-scale-test-metrics 8080:8080
+# Access http://localhost:8080/metrics
+```
+
+### Scale
+```bash
+az aks scale --resource-group my-rg --name my-aks --node-count 10
+```
+
+### Cleanup
+```bash
+az group delete --name my-rg --yes
+```
+
+## Documentation
+
+- [DEPLOYMENT.md](DEPLOYMENT.md) - Complete deployment guide
+- [infra/main.bicep](infra/main.bicep) - Infrastructure as Code
+- [k8s/deployment.yaml](k8s/deployment.yaml) - Kubernetes manifests
 
 ## Success Criteria
-A wholistic view of how many pods received authentication errors when connecting with Cosmos can be viewed
+A wholistic view of how many pods received authentication errors when connecting with Cosmos can be viewed through the Prometheus metrics endpoint.
+
