@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cosmos-msi-sa
+  namespace: default
+  annotations:
+    azure.workload.identity/client-id: ${MANAGED_IDENTITY_CLIENT_ID}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cosmos-msi-scale-test
+  namespace: default
+  labels:
+    app: cosmos-msi-scale-test
+spec:
+  selector:
+    matchLabels:
+      app: cosmos-msi-scale-test
+  template:
+    metadata:
+      labels:
+        app: cosmos-msi-scale-test
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: cosmos-msi-sa
+      containers:
+      - name: cosmos-msi-scale-test
+        image: ${ACR_LOGIN_SERVER}/cosmos-msi-scale-test:latest
+        env:
+        - name: COSMOS_ACCOUNT_URL
+          value: ${COSMOS_ACCOUNT_URL}
+        - name: TABLE_NAME
+          value: "ScaleTestTable"
+        - name: METRICS_PORT
+          value: "8080"
+        ports:
+        - name: metrics
+          containerPort: 8080
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cosmos-msi-scale-test-metrics
+  namespace: default
+  labels:
+    app: cosmos-msi-scale-test
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: metrics
+  selector:
+    app: cosmos-msi-scale-test
