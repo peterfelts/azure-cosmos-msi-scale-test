@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,10 +10,17 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+const (
+	// Health status constants
+	healthyStatus   int32 = 1
+	unhealthyStatus int32 = 0
 )
 
 var (
@@ -29,7 +37,7 @@ var (
 		Help: "Total number of other errors when connecting to Cosmos DB",
 	})
 	
-	healthStatus int32 = 1 // 1 = healthy, 0 = unhealthy
+	healthStatus int32 = healthyStatus
 )
 
 func init() {
@@ -75,7 +83,7 @@ func main() {
 	// Perform Cosmos DB connection and table operation
 	if err := performCosmosOperation(cosmosAccountURL, tableName); err != nil {
 		log.Printf("Error performing Cosmos operation: %v", err)
-		atomic.StoreInt32(&healthStatus, 0)
+		atomic.StoreInt32(&healthStatus, unhealthyStatus)
 	} else {
 		log.Printf("Successfully performed Cosmos operation")
 	}
@@ -111,21 +119,30 @@ func performCosmosOperation(accountURL, tableName string) error {
 	_, err = serviceClient.CreateTable(ctx, tableName, nil)
 	
 	if err != nil {
-		// Check if the error is because the table already exists
+		// Use Azure SDK's ResponseError for better error handling
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) {
+			// Check HTTP status code for authentication/authorization errors
+			if respErr.StatusCode == http.StatusUnauthorized || respErr.StatusCode == http.StatusForbidden {
+				log.Printf("Authentication/Authorization error (HTTP %d): %v", respErr.StatusCode, err)
+				authErrorCounter.Inc()
+				return fmt.Errorf("authentication error: %w", err)
+			}
+			
+			// Check if table already exists (conflict or specific error code)
+			if respErr.StatusCode == http.StatusConflict || strings.Contains(respErr.ErrorCode, "TableAlreadyExists") {
+				log.Printf("Table already exists (expected): %s", tableName)
+				successCounter.Inc()
+				return nil
+			}
+		}
+		
+		// Fallback: check error message for table already exists
 		errStr := err.Error()
-		if strings.Contains(errStr, "TableAlreadyExists") || strings.Contains(errStr, "already exists") {
+		if strings.Contains(strings.ToLower(errStr), "already exists") {
 			log.Printf("Table already exists (expected): %s", tableName)
 			successCounter.Inc()
 			return nil
-		}
-		
-		// Check if it's an authentication/authorization error
-		if strings.Contains(errStr, "401") || strings.Contains(errStr, "403") || 
-		   strings.Contains(errStr, "unauthorized") || strings.Contains(errStr, "forbidden") ||
-		   strings.Contains(errStr, "authentication") || strings.Contains(errStr, "authorization") {
-			log.Printf("Authentication/Authorization error: %v", err)
-			authErrorCounter.Inc()
-			return fmt.Errorf("authentication error: %w", err)
 		}
 		
 		// Other errors
@@ -140,7 +157,7 @@ func performCosmosOperation(accountURL, tableName string) error {
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
-	if atomic.LoadInt32(&healthStatus) == 1 {
+	if atomic.LoadInt32(&healthStatus) == healthyStatus {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("healthy"))
 	} else {
