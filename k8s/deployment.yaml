@@ -34,6 +34,8 @@ spec:
           value: "ScaleTestTable"
         - name: METRICS_PORT
           value: "8080"
+        - name: AZURE_CLIENT_ID
+          value: ${KUBELET_IDENTITY_CLIENT_ID}
         ports:
         - name: metrics
           containerPort: 8080

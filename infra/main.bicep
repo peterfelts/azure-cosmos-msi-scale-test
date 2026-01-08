@@ -65,24 +65,24 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
   location: location
 }
 
-// Grant the managed identity access to Cosmos DB - Data Contributor role
+// Grant the kubelet managed identity access to Cosmos DB - Data Contributor role
 resource cosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
   parent: cosmosAccount
-  name: guid(managedIdentity.id, cosmosAccount.id, 'contributor')
+  name: guid(aksCluster.properties.identityProfile.kubeletidentity.objectId, cosmosAccount.id, 'contributor')
   properties: {
     roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
-    principalId: managedIdentity.properties.principalId
+    principalId: aksCluster.properties.identityProfile.kubeletidentity.objectId
     scope: cosmosAccount.id
   }
 }
 
-// Grant the managed identity access to Cosmos DB - Data Reader role
+// Grant the kubelet managed identity access to Cosmos DB - Data Reader role
 resource cosmosRoleAssignmentReader 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
   parent: cosmosAccount
-  name: guid(managedIdentity.id, cosmosAccount.id, 'reader')
+  name: guid(aksCluster.properties.identityProfile.kubeletidentity.objectId, cosmosAccount.id, 'reader')
   properties: {
     roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001' // Cosmos DB Built-in Data Reader
-    principalId: managedIdentity.properties.principalId
+    principalId: aksCluster.properties.identityProfile.kubeletidentity.objectId
     scope: cosmosAccount.id
   }
 }
@@ -268,6 +268,8 @@ output cosmosAccountUrl string = 'https://${cosmosAccount.name}.table.cosmos.azu
 output aksClusterName string = aksCluster.name
 output managedIdentityName string = managedIdentity.name
 output managedIdentityClientId string = managedIdentity.properties.clientId
+output kubeletIdentityClientId string = aksCluster.properties.identityProfile.kubeletidentity.clientId
+output kubeletIdentityResourceId string = aksCluster.properties.identityProfile.kubeletidentity.resourceId
 output aksOidcIssuerUrl string = aksCluster.properties.oidcIssuerProfile.issuerURL
 output grafanaName string = grafana.name
 output grafanaUrl string = grafana.properties.endpoint

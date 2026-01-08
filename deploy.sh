@@ -157,6 +157,9 @@ if [ "$K8S_ONLY" = true ]; then
     fi
     MANAGED_IDENTITY_CLIENT_ID=$(az identity show --resource-group "$RESOURCE_GROUP" --name "$MANAGED_IDENTITY_NAME" --query "clientId" -o tsv)
     
+    # Get Kubelet Identity Client ID from AKS
+    KUBELET_IDENTITY_CLIENT_ID=$(az aks show --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER_NAME" --query "identityProfile.kubeletidentity.clientId" -o tsv)
+    
     # Find Grafana
     GRAFANA_NAME=$(az grafana list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv)
     if [ -n "$GRAFANA_NAME" ]; then
@@ -204,6 +207,7 @@ else
     AKS_CLUSTER_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.aksClusterName.value')
     MANAGED_IDENTITY_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.managedIdentityName.value')
     MANAGED_IDENTITY_CLIENT_ID=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.managedIdentityClientId.value')
+    KUBELET_IDENTITY_CLIENT_ID=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.kubeletIdentityClientId.value')
     AKS_OIDC_ISSUER_URL=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.aksOidcIssuerUrl.value')
     GRAFANA_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.grafanaName.value')
     GRAFANA_URL=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.grafanaUrl.value')
@@ -252,6 +256,7 @@ print_info "Deploying to Kubernetes..."
 export ACR_LOGIN_SERVER
 export COSMOS_ACCOUNT_URL
 export MANAGED_IDENTITY_CLIENT_ID
+export KUBELET_IDENTITY_CLIENT_ID
 envsubst < k8s/deployment.yaml | kubectl apply -f -
 
 # Apply Prometheus scrape configuration

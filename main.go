@@ -96,9 +96,24 @@ func main() {
 func performCosmosOperation(accountURL, tableName string) error {
 	ctx := context.Background()
 
-	// Create a Managed Identity credential
+	// Get the client ID from environment variable
+	clientID := os.Getenv("AZURE_CLIENT_ID")
+	
+	// Create a Managed Identity credential with explicit client ID
 	log.Println("Creating Managed Identity credential...")
-	cred, err := azidentity.NewManagedIdentityCredential(nil)
+	var cred *azidentity.ManagedIdentityCredential
+	var err error
+	
+	if clientID != "" {
+		log.Printf("Using Managed Identity with client ID: %s", clientID)
+		cred, err = azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+			ID: azidentity.ClientID(clientID),
+		})
+	} else {
+		log.Println("Using default Managed Identity (no client ID specified)")
+		cred, err = azidentity.NewManagedIdentityCredential(nil)
+	}
+	
 	if err != nil {
 		log.Printf("Failed to create Managed Identity credential: %v", err)
 		authErrorCounter.Inc()
