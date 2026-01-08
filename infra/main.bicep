@@ -8,7 +8,7 @@ param namePrefix string = 'cosmosmsiscale'
 param aksNodeCount int = 3
 
 @description('AKS node VM size')
-param aksNodeSize string = 'Standard_D2_v3'
+param aksNodeSize string = 'Standard_Dv3'
 
 // Variables
 var acrName = '${namePrefix}acr${uniqueString(resourceGroup().id)}'
@@ -65,7 +65,7 @@ resource cosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssi
   parent: cosmosAccount
   name: guid(managedIdentity.id, cosmosAccount.id, 'contributor')
   properties: {
-    roleDefinitionId: '${cosmosAccount.id}/tableRoleDefinitions/00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
+    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
     principalId: managedIdentity.properties.principalId
     scope: cosmosAccount.id
   }
