@@ -41,11 +41,13 @@ Optional Options:
     -l, --location LOCATION         Azure location (default: eastus)
     -p, --prefix PREFIX             Resource name prefix (default: cosmosmsiscale)
     -n, --node-count COUNT          AKS node count (default: 3)
+    -k, --k8s-only                  Deploy Kubernetes manifests only (skip ARM deployment)
     -h, --help                      Display this help message
 
 Example:
     $0 --subscription-id "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
     $0 -s "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" -r my-rg -l westus2 -n 5
+    $0 -s "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" -k  # Deploy K8s only
 
 EOF
     exit 1
@@ -57,6 +59,7 @@ RESOURCE_GROUP="cosmos-msi-scale-test-rg"
 LOCATION="eastus"
 NAME_PREFIX="cosmosmsiscale"
 NODE_COUNT=3
+K8S_ONLY=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -79,6 +82,10 @@ while [[ $# -gt 0 ]]; do
         -n|--node-count)
             NODE_COUNT="$2"
             shift 2
+            ;;
+        -k|--k8s-only)
+            K8S_ONLY=true
+            shift
             ;;
         -h|--help)
             usage
@@ -112,48 +119,94 @@ print_info "All required tools are installed."
 print_info "Setting Azure subscription to $SUBSCRIPTION_ID..."
 az account set --subscription "$SUBSCRIPTION_ID"
 
-# Create resource group
-print_info "Creating resource group $RESOURCE_GROUP in $LOCATION..."
-az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none
+if [ "$K8S_ONLY" = true ]; then
+    print_info "K8s-only mode: Skipping ARM deployment, retrieving existing resources..."
+    
+    # Get existing resource information
+    print_info "Retrieving existing resources from resource group $RESOURCE_GROUP..."
+    
+    # Find ACR
+    ACR_NAME=$(az acr list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv)
+    if [ -z "$ACR_NAME" ]; then
+        print_error "No ACR found in resource group $RESOURCE_GROUP"
+        exit 1
+    fi
+    ACR_LOGIN_SERVER=$(az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" --query "loginServer" -o tsv)
+    
+    # Find Cosmos DB account
+    COSMOS_ACCOUNT_NAME=$(az cosmosdb list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv)
+    if [ -z "$COSMOS_ACCOUNT_NAME" ]; then
+        print_error "No Cosmos DB account found in resource group $RESOURCE_GROUP"
+        exit 1
+    fi
+    COSMOS_ACCOUNT_URL="https://${COSMOS_ACCOUNT_NAME}.table.cosmos.azure.com"
+    
+    # Find AKS cluster
+    AKS_CLUSTER_NAME=$(az aks list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv)
+    if [ -z "$AKS_CLUSTER_NAME" ]; then
+        print_error "No AKS cluster found in resource group $RESOURCE_GROUP"
+        exit 1
+    fi
+    AKS_OIDC_ISSUER_URL=$(az aks show --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER_NAME" --query "oidcIssuerProfile.issuerUrl" -o tsv)
+    
+    # Find Managed Identity
+    MANAGED_IDENTITY_NAME=$(az identity list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv)
+    if [ -z "$MANAGED_IDENTITY_NAME" ]; then
+        print_error "No Managed Identity found in resource group $RESOURCE_GROUP"
+        exit 1
+    fi
+    MANAGED_IDENTITY_CLIENT_ID=$(az identity show --resource-group "$RESOURCE_GROUP" --name "$MANAGED_IDENTITY_NAME" --query "clientId" -o tsv)
+    
+    print_info "Retrieved existing resources:"
+    print_info "ACR Name: $ACR_NAME"
+    print_info "ACR Login Server: $ACR_LOGIN_SERVER"
+    print_info "Cosmos Account: $COSMOS_ACCOUNT_NAME"
+    print_info "AKS Cluster: $AKS_CLUSTER_NAME"
+    print_info "Managed Identity: $MANAGED_IDENTITY_NAME"
+else
+    # Create resource group
+    print_info "Creating resource group $RESOURCE_GROUP in $LOCATION..."
+    az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none
 
-# Deploy infrastructure using Bicep
-print_info "Deploying Azure infrastructure..."
-DEPLOYMENT_OUTPUT=$(az deployment group create \
-    --resource-group "$RESOURCE_GROUP" \
-    --template-file infra/main.bicep \
-    --parameters location="$LOCATION" namePrefix="$NAME_PREFIX" aksNodeCount="$NODE_COUNT" \
-    --query properties.outputs \
-    --output json)
+    # Deploy infrastructure using Bicep
+    print_info "Deploying Azure infrastructure..."
+    DEPLOYMENT_OUTPUT=$(az deployment group create \
+        --resource-group "$RESOURCE_GROUP" \
+        --template-file infra/main.bicep \
+        --parameters location="$LOCATION" namePrefix="$NAME_PREFIX" aksNodeCount="$NODE_COUNT" \
+        --query properties.outputs \
+        --output json)
 
-# Extract outputs
-ACR_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.acrName.value')
-ACR_LOGIN_SERVER=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.acrLoginServer.value')
-COSMOS_ACCOUNT_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.cosmosAccountName.value')
-COSMOS_ACCOUNT_URL=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.cosmosAccountUrl.value')
-AKS_CLUSTER_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.aksClusterName.value')
-MANAGED_IDENTITY_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.managedIdentityName.value')
-MANAGED_IDENTITY_CLIENT_ID=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.managedIdentityClientId.value')
-AKS_OIDC_ISSUER_URL=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.aksOidcIssuerUrl.value')
+    # Extract outputs
+    ACR_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.acrName.value')
+    ACR_LOGIN_SERVER=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.acrLoginServer.value')
+    COSMOS_ACCOUNT_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.cosmosAccountName.value')
+    COSMOS_ACCOUNT_URL=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.cosmosAccountUrl.value')
+    AKS_CLUSTER_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.aksClusterName.value')
+    MANAGED_IDENTITY_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.managedIdentityName.value')
+    MANAGED_IDENTITY_CLIENT_ID=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.managedIdentityClientId.value')
+    AKS_OIDC_ISSUER_URL=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.aksOidcIssuerUrl.value')
 
-print_info "Infrastructure deployed successfully!"
-print_info "ACR Name: $ACR_NAME"
-print_info "ACR Login Server: $ACR_LOGIN_SERVER"
-print_info "Cosmos Account: $COSMOS_ACCOUNT_NAME"
-print_info "AKS Cluster: $AKS_CLUSTER_NAME"
-print_info "Managed Identity: $MANAGED_IDENTITY_NAME"
+    print_info "Infrastructure deployed successfully!"
+    print_info "ACR Name: $ACR_NAME"
+    print_info "ACR Login Server: $ACR_LOGIN_SERVER"
+    print_info "Cosmos Account: $COSMOS_ACCOUNT_NAME"
+    print_info "AKS Cluster: $AKS_CLUSTER_NAME"
+    print_info "Managed Identity: $MANAGED_IDENTITY_NAME"
 
-# Build and push Docker image
-print_info "Building Docker image..."
-docker build -t cosmos-msi-scale-test:latest .
+    # Build and push Docker image
+    print_info "Building Docker image..."
+    docker build -t cosmos-msi-scale-test:latest .
 
-print_info "Logging into ACR..."
-az acr login --name "$ACR_NAME"
+    print_info "Logging into ACR..."
+    az acr login --name "$ACR_NAME"
 
-print_info "Tagging and pushing image to ACR..."
-docker tag cosmos-msi-scale-test:latest "$ACR_LOGIN_SERVER/cosmos-msi-scale-test:latest"
-docker push "$ACR_LOGIN_SERVER/cosmos-msi-scale-test:latest"
+    print_info "Tagging and pushing image to ACR..."
+    docker tag cosmos-msi-scale-test:latest "$ACR_LOGIN_SERVER/cosmos-msi-scale-test:latest"
+    docker push "$ACR_LOGIN_SERVER/cosmos-msi-scale-test:latest"
 
-print_info "Image pushed successfully!"
+    print_info "Image pushed successfully!"
+fi
 
 # Get AKS credentials
 print_info "Getting AKS credentials..."

@@ -70,6 +70,12 @@ The `deploy.sh` script automates the entire deployment process:
   --location "westus2" \
   --prefix "mytest" \
   --node-count 5
+
+# Deploy only Kubernetes manifests (skip ARM deployment)
+./deploy.sh \
+  --subscription-id "your-subscription-id" \
+  --resource-group "my-rg" \
+  --k8s-only
 ```
 
 #### Deployment Script Options
@@ -78,10 +84,31 @@ The `deploy.sh` script automates the entire deployment process:
 - `-l, --location`: Azure location (default: eastus)
 - `-p, --prefix`: Resource name prefix (default: cosmosmsiscale)
 - `-n, --node-count`: Initial AKS node count (default: 3)
+- `-k, --k8s-only`: Deploy Kubernetes manifests only, skip ARM deployment (default: false)
 - `-h, --help`: Display help message
+
+#### Kubernetes-Only Deployment Mode
+
+Use the `--k8s-only` flag when you want to update or redeploy the Kubernetes manifests without recreating Azure infrastructure:
+
+**Use cases:**
+- Updating application configuration (environment variables, resource limits, etc.)
+- Redeploying after modifying the Kubernetes manifests
+- Testing different DaemonSet configurations
+- Updating the application after a new Docker image has been pushed manually
+
+**What it does:**
+- Retrieves information from existing Azure resources (ACR, Cosmos DB, AKS, Managed Identity)
+- Skips ARM/Bicep deployment
+- Skips Docker build and push
+- Gets AKS credentials and deploys/updates Kubernetes manifests
+- Sets up federated identity credential (if not already exists)
+
+**Important:** The resource group must already exist with all required resources deployed.
 
 ### What the Deployment Script Does
 
+**Full Deployment Mode (default):**
 1. **Validates Prerequisites**: Checks for required tools (az, docker, kubectl)
 2. **Creates Resource Group**: Sets up Azure resource group
 3. **Deploys Infrastructure**: Uses Bicep to provision:
@@ -94,6 +121,13 @@ The `deploy.sh` script automates the entire deployment process:
 5. **Configures Workload Identity**: Sets up federated identity credential
 6. **Deploys to Kubernetes**: Applies DaemonSet configuration
 7. **Verifies Deployment**: Checks pod status
+
+**Kubernetes-Only Mode (`--k8s-only`):**
+1. **Validates Prerequisites**: Checks for required tools
+2. **Retrieves Resources**: Gets information from existing Azure resources
+3. **Configures Workload Identity**: Sets up federated identity credential (if needed)
+4. **Deploys to Kubernetes**: Applies DaemonSet configuration
+5. **Verifies Deployment**: Checks pod status
 
 ## Viewing Metrics
 
