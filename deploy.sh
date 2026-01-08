@@ -172,6 +172,9 @@ az identity federated-credential create \
 
 # Deploy to Kubernetes
 print_info "Deploying to Kubernetes..."
+export ACR_LOGIN_SERVER
+export COSMOS_ACCOUNT_URL
+export MANAGED_IDENTITY_CLIENT_ID
 envsubst < k8s/deployment.yaml | kubectl apply -f -
 
 print_info "Waiting for pods to be ready..."
