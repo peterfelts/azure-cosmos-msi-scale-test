@@ -10,6 +10,9 @@ param aksNodeCount int = 3
 @description('AKS node VM size')
 param aksNodeSize string = 'standard_d2_v3'
 
+@description('Principal ID of the user deploying the template (for Grafana access)')
+param deployerPrincipalId string = ''
+
 // Variables
 var acrName = '${namePrefix}acr${uniqueString(resourceGroup().id)}'
 var cosmosAccountName = '${namePrefix}cosmos${uniqueString(resourceGroup().id)}'
@@ -62,12 +65,23 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
   location: location
 }
 
-// Grant the managed identity access to Cosmos DB
+// Grant the managed identity access to Cosmos DB - Data Contributor role
 resource cosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
   parent: cosmosAccount
   name: guid(managedIdentity.id, cosmosAccount.id, 'contributor')
   properties: {
     roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
+    principalId: managedIdentity.properties.principalId
+    scope: cosmosAccount.id
+  }
+}
+
+// Grant the managed identity access to Cosmos DB - Data Reader role
+resource cosmosRoleAssignmentReader 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
+  parent: cosmosAccount
+  name: guid(managedIdentity.id, cosmosAccount.id, 'reader')
+  properties: {
+    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001' // Cosmos DB Built-in Data Reader
     principalId: managedIdentity.properties.principalId
     scope: cosmosAccount.id
   }
@@ -232,6 +246,17 @@ resource grafanaMonitoringReaderRole 'Microsoft.Authorization/roleAssignments@20
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '43d0d8ad-25c7-4714-9337-8ba259a9fe05') // Monitoring Reader
     principalId: grafana.identity.principalId
     principalType: 'ServicePrincipal'
+  }
+}
+
+// Grant Grafana Admin role to the deployer user (if provided)
+resource grafanaAdminRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployerPrincipalId != '') {
+  name: guid(grafana.id, deployerPrincipalId, 'GrafanaAdmin')
+  scope: grafana
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '22926164-76b3-42b3-bc55-97df8dab3e41') // Grafana Admin
+    principalId: deployerPrincipalId
+    principalType: 'User'
   }
 }
 

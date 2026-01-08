@@ -178,12 +178,21 @@ else
     print_info "Creating resource group $RESOURCE_GROUP in $LOCATION..."
     az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output none
 
+    # Get the current user's principal ID for Grafana access
+    print_info "Getting current user principal ID..."
+    DEPLOYER_PRINCIPAL_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
+    if [ -n "$DEPLOYER_PRINCIPAL_ID" ]; then
+        print_info "Will grant Grafana Admin access to current user"
+    else
+        print_warn "Could not retrieve user principal ID - Grafana roles will not be assigned"
+    fi
+
     # Deploy infrastructure using Bicep
     print_info "Deploying Azure infrastructure..."
     DEPLOYMENT_OUTPUT=$(az deployment group create \
         --resource-group "$RESOURCE_GROUP" \
         --template-file infra/main.bicep \
-        --parameters location="$LOCATION" namePrefix="$NAME_PREFIX" aksNodeCount="$NODE_COUNT" \
+        --parameters location="$LOCATION" namePrefix="$NAME_PREFIX" aksNodeCount="$NODE_COUNT" deployerPrincipalId="$DEPLOYER_PRINCIPAL_ID" \
         --query properties.outputs \
         --output json)
 
