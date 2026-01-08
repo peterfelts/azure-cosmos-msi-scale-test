@@ -6,7 +6,7 @@ The goal of this project is to perform scale testing of Azure MSI-based authenti
 To deploy the complete solution to Azure:
 
 ```bash
-./deploy.sh --subscription-id "your-subscription-id"
+./deploy.sh --subscription-id 00000000-0000-0000-0000-000000000000 --resource-group "myresourcegroup" --location "westus2" --cosmos-location "eastus2euap"
 ```
 
 For detailed instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
@@ -55,10 +55,12 @@ The dashboard is automatically imported to Azure Managed Grafana during deployme
 
 ### Deploy
 ```bash
-./deploy.sh --subscription-id "your-subscription-id" \
-  --resource-group "my-rg" \
+./deploy.sh \
+  --subscription-id 00000000-0000-0000-0000-000000000000 \
+  --resource-group "myresourcegroup" \
   --location "westus2" \
-  --node-count 5
+  --cosmos-location "eastus2euap"
+
 ```
 
 ### View Metrics
@@ -69,12 +71,19 @@ kubectl port-forward service/cosmos-msi-scale-test-metrics 8080:8080
 
 ### Scale
 ```bash
-az aks scale --resource-group my-rg --name my-aks --node-count 10
+az aks nodepool scale -g myresourcegroup --cluster-name cosmosmsiscale-aks -n nodepool1 --node-count 10000
 ```
 
 ### Cleanup
+**NOTE** Be sure to scale nodes down in 1K batches
 ```bash
-az group delete --name my-rg --yes
+az aks nodepool scale -g myresourcegroup --cluster-name cosmosmsiscale-aks -n nodepool1 --node-count 10000
+az aks nodepool scale -g myresourcegroup --cluster-name cosmosmsiscale-aks -n nodepool1 --node-count 9000
+az aks nodepool scale -g myresourcegroup --cluster-name cosmosmsiscale-aks -n nodepool1 --node-count 8000
+...
+az aks nodepool scale -g myresourcegroup --cluster-name cosmosmsiscale-aks -n nodepool1 --node-count 3
+
+az group delete --name myresourcegroup --yes
 ```
 
 ## Documentation
@@ -84,5 +93,5 @@ az group delete --name my-rg --yes
 - [k8s/deployment.yaml](k8s/deployment.yaml) - Kubernetes manifests
 
 ## Success Criteria
-A wholistic view of how many pods received authentication errors when connecting with Cosmos can be viewed through the Prometheus metrics endpoint.
+A wholistic view of how many pods successfully connected to Cosmos using MSI authentication or received authentication errors.
 
