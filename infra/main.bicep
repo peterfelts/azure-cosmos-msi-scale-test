@@ -16,7 +16,7 @@ var cosmosAccountName = '${namePrefix}cosmos${uniqueString(resourceGroup().id)}'
 var aksClusterName = '${namePrefix}-aks'
 var managedIdentityName = '${namePrefix}-identity'
 var monitorWorkspaceName = '${namePrefix}-monitor-${uniqueString(resourceGroup().id)}'
-var grafanaName = '${namePrefix}-grafana-${uniqueString(resourceGroup().id)}'
+var grafanaName = 'grf-${uniqueString(resourceGroup().id)}'
 
 // Azure Container Registry
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
