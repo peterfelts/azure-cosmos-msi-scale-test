@@ -8,7 +8,7 @@ param namePrefix string = 'cosmosmsiscale'
 param aksNodeCount int = 3
 
 @description('AKS node VM size')
-param aksNodeSize string = 'Standard_Dv3'
+param aksNodeSize string = 'standard_d2_v3'
 
 // Variables
 var acrName = '${namePrefix}acr${uniqueString(resourceGroup().id)}'
