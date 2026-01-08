@@ -1,0 +1,35 @@
+# Build stage
+FROM golang:1.23-alpine AS builder
+
+# Install ca-certificates for HTTPS
+RUN apk --no-cache add ca-certificates git
+
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY main.go ./
+
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o cosmos-msi-scale-test .
+
+# Final stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /root/
+
+# Copy the binary from builder
+COPY --from=builder /app/cosmos-msi-scale-test .
+
+# Expose metrics port
+EXPOSE 8080
+
+# Run the application
+CMD ["./cosmos-msi-scale-test"]

@@ -1,0 +1,430 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "7428485213177421801"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for all resources"
+      }
+    },
+    "cosmosLocation": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Location for Cosmos DB account (defaults to same as other resources)"
+      }
+    },
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "cosmosmsiscale",
+      "metadata": {
+        "description": "Name prefix for resources"
+      }
+    },
+    "aksNodeCount": {
+      "type": "int",
+      "defaultValue": 3,
+      "metadata": {
+        "description": "AKS node count"
+      }
+    },
+    "aksNodeSize": {
+      "type": "string",
+      "defaultValue": "standard_d2_v3",
+      "metadata": {
+        "description": "AKS node VM size"
+      }
+    },
+    "deployerPrincipalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Principal ID of the user deploying the template (for Grafana access)"
+      }
+    }
+  },
+  "variables": {
+    "acrName": "[format('{0}acr{1}', parameters('namePrefix'), uniqueString(resourceGroup().id))]",
+    "cosmosAccountName": "[format('{0}cosmos{1}', parameters('namePrefix'), uniqueString(resourceGroup().id))]",
+    "aksClusterName": "[format('{0}-aks', parameters('namePrefix'))]",
+    "managedIdentityName": "[format('{0}-identity', parameters('namePrefix'))]",
+    "monitorWorkspaceName": "[format('{0}-monitor-{1}', parameters('namePrefix'), uniqueString(resourceGroup().id))]",
+    "grafanaName": "[format('grf-{0}', uniqueString(resourceGroup().id))]",
+    "actualCosmosLocation": "[if(empty(parameters('cosmosLocation')), parameters('location'), parameters('cosmosLocation'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2023-07-01",
+      "name": "[variables('acrName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Basic"
+      },
+      "properties": {
+        "adminUserEnabled": false
+      }
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "apiVersion": "2024-05-15",
+      "name": "[variables('cosmosAccountName')]",
+      "location": "[variables('actualCosmosLocation')]",
+      "kind": "GlobalDocumentDB",
+      "properties": {
+        "databaseAccountOfferType": "Standard",
+        "disableLocalAuth": true,
+        "consistencyPolicy": {
+          "defaultConsistencyLevel": "Session"
+        },
+        "locations": [
+          {
+            "locationName": "[parameters('location')]",
+            "failoverPriority": 0,
+            "isZoneRedundant": false
+          }
+        ],
+        "capabilities": [
+          {
+            "name": "EnableTable"
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[variables('managedIdentityName')]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "type": "Microsoft.ContainerService/managedClusters",
+      "apiVersion": "2024-02-01",
+      "name": "[variables('aksClusterName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')))]": {}
+        }
+      },
+      "properties": {
+        "dnsPrefix": "[variables('aksClusterName')]",
+        "agentPoolProfiles": [
+          {
+            "name": "nodepool1",
+            "count": "[parameters('aksNodeCount')]",
+            "vmSize": "[parameters('aksNodeSize')]",
+            "mode": "System",
+            "osType": "Linux",
+            "type": "VirtualMachineScaleSets"
+          }
+        ],
+        "networkProfile": {
+          "networkPlugin": "azure",
+          "networkPluginMode": "overlay",
+          "serviceCidr": "10.0.0.0/16",
+          "dnsServiceIP": "10.0.0.10",
+          "podCidrs": [
+            "10.244.0.0/16"
+          ]
+        },
+        "oidcIssuerProfile": {
+          "enabled": true
+        },
+        "securityProfile": {
+          "workloadIdentity": {
+            "enabled": true
+          }
+        },
+        "azureMonitorProfile": {
+          "metrics": {
+            "enabled": true,
+            "kubeStateMetrics": {
+              "metricLabelsAllowlist": "",
+              "metricAnnotationsAllowList": ""
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName'))]",
+        "[resourceId('Microsoft.Monitor/accounts', variables('monitorWorkspaceName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.ContainerRegistry/registries/{0}', variables('acrName'))]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName')), 'acrpull')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
+        "principalId": "[reference(resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName')), '2024-02-01').identityProfile.kubeletidentity.objectId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]",
+        "[resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
+      "apiVersion": "2024-05-15",
+      "name": "[format('{0}/{1}', variables('cosmosAccountName'), guid(resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName')), resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName')), 'contributor'))]",
+      "properties": {
+        "roleDefinitionId": "[format('{0}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002', resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName')))]",
+        "principalId": "[reference(resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName')), '2024-02-01').identityProfile.kubeletidentity.objectId]",
+        "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName'))]",
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
+      "apiVersion": "2024-05-15",
+      "name": "[format('{0}/{1}', variables('cosmosAccountName'), guid(resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName')), resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName')), 'reader'))]",
+      "properties": {
+        "roleDefinitionId": "[format('{0}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001', resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName')))]",
+        "principalId": "[reference(resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName')), '2024-02-01').identityProfile.kubeletidentity.objectId]",
+        "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName'))]",
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions",
+      "apiVersion": "2024-05-15",
+      "name": "[format('{0}/{1}', variables('cosmosAccountName'), guid(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName')), 'customDbWrite'))]",
+      "properties": {
+        "roleName": "Custom Database Write Role",
+        "type": "CustomRole",
+        "assignableScopes": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName'))]"
+        ],
+        "permissions": [
+          {
+            "dataActions": [
+              "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/write"
+            ]
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
+      "apiVersion": "2024-05-15",
+      "name": "[format('{0}/{1}', variables('cosmosAccountName'), guid(resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName')), resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName')), 'customDbWrite'))]",
+      "properties": {
+        "roleDefinitionId": "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', variables('cosmosAccountName'), guid(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName')), 'customDbWrite'))]",
+        "principalId": "[reference(resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName')), '2024-02-01').identityProfile.kubeletidentity.objectId]",
+        "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName'))]",
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName'))]",
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', variables('cosmosAccountName'), guid(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName')), 'customDbWrite'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Monitor/accounts",
+      "apiVersion": "2023-04-03",
+      "name": "[variables('monitorWorkspaceName')]",
+      "location": "[parameters('location')]",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Insights/dataCollectionEndpoints",
+      "apiVersion": "2022-06-01",
+      "name": "[format('{0}-dce', parameters('namePrefix'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "networkAcls": {
+          "publicNetworkAccess": "Enabled"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "apiVersion": "2022-06-01",
+      "name": "[format('{0}-dcr', parameters('namePrefix'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "dataCollectionEndpointId": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', format('{0}-dce', parameters('namePrefix')))]",
+        "dataSources": {
+          "prometheusForwarder": [
+            {
+              "name": "PrometheusDataSource",
+              "streams": [
+                "Microsoft-PrometheusMetrics"
+              ],
+              "labelIncludeFilter": {}
+            }
+          ]
+        },
+        "destinations": {
+          "monitoringAccounts": [
+            {
+              "accountResourceId": "[resourceId('Microsoft.Monitor/accounts', variables('monitorWorkspaceName'))]",
+              "name": "MonitoringAccount"
+            }
+          ]
+        },
+        "dataFlows": [
+          {
+            "streams": [
+              "Microsoft-PrometheusMetrics"
+            ],
+            "destinations": [
+              "MonitoringAccount"
+            ]
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/dataCollectionEndpoints', format('{0}-dce', parameters('namePrefix')))]",
+        "[resourceId('Microsoft.Monitor/accounts', variables('monitorWorkspaceName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/dataCollectionRuleAssociations",
+      "apiVersion": "2022-06-01",
+      "scope": "[format('Microsoft.ContainerService/managedClusters/{0}', variables('aksClusterName'))]",
+      "name": "configurationAccessEndpoint",
+      "properties": {
+        "dataCollectionRuleId": "[resourceId('Microsoft.Insights/dataCollectionRules', format('{0}-dcr', parameters('namePrefix')))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName'))]",
+        "[resourceId('Microsoft.Insights/dataCollectionRules', format('{0}-dcr', parameters('namePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Dashboard/grafana",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('grafanaName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "grafanaIntegrations": {
+          "azureMonitorWorkspaceIntegrations": [
+            {
+              "azureMonitorWorkspaceResourceId": "[resourceId('Microsoft.Monitor/accounts', variables('monitorWorkspaceName'))]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Monitor/accounts', variables('monitorWorkspaceName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.Monitor/accounts/{0}', variables('monitorWorkspaceName'))]",
+      "name": "[guid(resourceId('Microsoft.Dashboard/grafana', variables('grafanaName')), resourceId('Microsoft.Monitor/accounts', variables('monitorWorkspaceName')), 'MonitoringReader')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '43d0d8ad-25c7-4714-9337-8ba259a9fe05')]",
+        "principalId": "[reference(resourceId('Microsoft.Dashboard/grafana', variables('grafanaName')), '2023-09-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Dashboard/grafana', variables('grafanaName'))]",
+        "[resourceId('Microsoft.Monitor/accounts', variables('monitorWorkspaceName'))]"
+      ]
+    },
+    {
+      "condition": "[not(equals(parameters('deployerPrincipalId'), ''))]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.Dashboard/grafana/{0}', variables('grafanaName'))]",
+      "name": "[guid(resourceId('Microsoft.Dashboard/grafana', variables('grafanaName')), parameters('deployerPrincipalId'), 'GrafanaAdmin')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '22926164-76b3-42b3-bc55-97df8dab3e41')]",
+        "principalId": "[parameters('deployerPrincipalId')]",
+        "principalType": "User"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Dashboard/grafana', variables('grafanaName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "acrName": {
+      "type": "string",
+      "value": "[variables('acrName')]"
+    },
+    "acrLoginServer": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), '2023-07-01').loginServer]"
+    },
+    "cosmosAccountName": {
+      "type": "string",
+      "value": "[variables('cosmosAccountName')]"
+    },
+    "cosmosAccountUrl": {
+      "type": "string",
+      "value": "[format('https://{0}.table.cosmos.azure.com', variables('cosmosAccountName'))]"
+    },
+    "aksClusterName": {
+      "type": "string",
+      "value": "[variables('aksClusterName')]"
+    },
+    "managedIdentityName": {
+      "type": "string",
+      "value": "[variables('managedIdentityName')]"
+    },
+    "managedIdentityClientId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentityName')), '2023-01-31').clientId]"
+    },
+    "kubeletIdentityClientId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName')), '2024-02-01').identityProfile.kubeletidentity.clientId]"
+    },
+    "kubeletIdentityResourceId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName')), '2024-02-01').identityProfile.kubeletidentity.resourceId]"
+    },
+    "aksOidcIssuerUrl": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName')), '2024-02-01').oidcIssuerProfile.issuerURL]"
+    },
+    "grafanaName": {
+      "type": "string",
+      "value": "[variables('grafanaName')]"
+    },
+    "grafanaUrl": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Dashboard/grafana', variables('grafanaName')), '2023-09-01').endpoint]"
+    },
+    "monitorWorkspaceName": {
+      "type": "string",
+      "value": "[variables('monitorWorkspaceName')]"
+    },
+    "monitorWorkspaceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Monitor/accounts', variables('monitorWorkspaceName'))]"
+    }
+  }
+}
