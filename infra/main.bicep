@@ -69,28 +69,6 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
   location: location
 }
 
-// Grant the kubelet managed identity access to Cosmos DB - Data Contributor role
-resource cosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
-  parent: cosmosAccount
-  name: guid(aksCluster.id, cosmosAccount.id, 'contributor')
-  properties: {
-    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
-    principalId: aksCluster.properties.identityProfile.kubeletidentity.objectId
-    scope: cosmosAccount.id
-  }
-}
-
-// Grant the kubelet managed identity access to Cosmos DB - Data Reader role
-resource cosmosRoleAssignmentReader 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
-  parent: cosmosAccount
-  name: guid(aksCluster.id, cosmosAccount.id, 'reader')
-  properties: {
-    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001' // Cosmos DB Built-in Data Reader
-    principalId: aksCluster.properties.identityProfile.kubeletidentity.objectId
-    scope: cosmosAccount.id
-  }
-}
-
 // AKS Cluster with Azure Overlay Networking
 resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   name: aksClusterName
@@ -153,6 +131,28 @@ resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d') // AcrPull role
     principalId: aksCluster.properties.identityProfile.kubeletidentity.objectId
     principalType: 'ServicePrincipal'
+  }
+}
+
+// Grant the kubelet managed identity access to Cosmos DB - Data Contributor role
+resource cosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
+  parent: cosmosAccount
+  name: guid(aksCluster.id, cosmosAccount.id, 'contributor')
+  properties: {
+    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
+    principalId: aksCluster.properties.identityProfile.kubeletidentity.objectId
+    scope: cosmosAccount.id
+  }
+}
+
+// Grant the kubelet managed identity access to Cosmos DB - Data Reader role
+resource cosmosRoleAssignmentReader 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
+  parent: cosmosAccount
+  name: guid(aksCluster.id, cosmosAccount.id, 'reader')
+  properties: {
+    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001' // Cosmos DB Built-in Data Reader
+    principalId: aksCluster.properties.identityProfile.kubeletidentity.objectId
+    scope: cosmosAccount.id
   }
 }
 
