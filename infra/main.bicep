@@ -68,7 +68,7 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
 // Grant the kubelet managed identity access to Cosmos DB - Data Contributor role
 resource cosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
   parent: cosmosAccount
-  name: guid(aksCluster.properties.identityProfile.kubeletidentity.objectId, cosmosAccount.id, 'contributor')
+  name: guid(aksCluster.id, cosmosAccount.id, 'contributor')
   properties: {
     roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002' // Cosmos DB Built-in Data Contributor
     principalId: aksCluster.properties.identityProfile.kubeletidentity.objectId
@@ -79,7 +79,7 @@ resource cosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssi
 // Grant the kubelet managed identity access to Cosmos DB - Data Reader role
 resource cosmosRoleAssignmentReader 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
   parent: cosmosAccount
-  name: guid(aksCluster.properties.identityProfile.kubeletidentity.objectId, cosmosAccount.id, 'reader')
+  name: guid(aksCluster.id, cosmosAccount.id, 'reader')
   properties: {
     roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000001' // Cosmos DB Built-in Data Reader
     principalId: aksCluster.properties.identityProfile.kubeletidentity.objectId
