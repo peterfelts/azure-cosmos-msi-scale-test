@@ -305,7 +305,13 @@ and available in Grafana.
 To access Grafana:
 1. Navigate to: ${GRAFANA_URL}
 2. Sign in with your Azure credentials
-3. Create a new dashboard or explore metrics
+3. Look for the "Cosmos MSI Scale Test" dashboard (automatically imported)
+   - Or create a new dashboard and explore metrics
+
+Pre-built Dashboard:
+The deployment includes a comprehensive Grafana dashboard with visualizations
+for aggregated success/error counts, time series graphs, per-pod breakdowns,
+and rate calculations. Find it in Grafana under "Cosmos MSI Scale Test".
 
 Available metrics:
 - cosmos_connection_success_total

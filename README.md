@@ -36,12 +36,20 @@ For detailed instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 - **Automated Deployment**: Single command deploys all infrastructure and application
 - **Production-Ready**: Includes health checks, resource limits, and proper error handling
 
-## Metrics
+## Metrics & Visualization
 
 The application exposes these Prometheus metrics at `/metrics`:
 - `cosmos_connection_success_total`: Successful Cosmos DB operations
 - `cosmos_auth_error_total`: Authentication/authorization errors
 - `cosmos_other_error_total`: Other errors
+
+**Grafana Dashboard**: A pre-built dashboard (`grafana/dashboard.json`) is included with visualizations for:
+- Aggregated success/auth-error/other-error counts
+- Time series graphs of metrics over time
+- Per-pod breakdowns for troubleshooting
+- Rate calculations for performance monitoring
+
+The dashboard is automatically imported to Azure Managed Grafana during deployment.
 
 ## Usage
 

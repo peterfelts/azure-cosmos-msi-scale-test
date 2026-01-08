@@ -166,30 +166,53 @@ After deployment, metrics are automatically collected by Azure Monitor for Prome
 3. Sign in with your Azure credentials
 4. You'll have access to the Grafana workspace
 
-**Create a Dashboard:**
-1. In Grafana, click "+" and select "Dashboard"
-2. Add a new panel
-3. Select "Prometheus" as the data source
-4. Use PromQL queries to visualize metrics:
+**Pre-built Dashboard:**
+
+A comprehensive dashboard is included in the `grafana/` directory with the following visualizations:
+
+- **Total Metrics** (top row): Aggregated counts of successful connections, auth errors, and other errors
+- **Aggregated Metrics Over Time**: Time series graph showing all three metrics with color-coding
+- **Success Rate by Pod**: 5-minute rate of successful operations per pod
+- **Auth Error Rate by Pod**: 5-minute rate of authentication errors per pod  
+- **Metrics by Pod**: Table view with current values for each pod with color-coded cells
+
+**Importing the Dashboard:**
+
+Option 1 - Automatic (during deployment):
+- The dashboard is automatically imported when you run `deploy.sh`
+
+Option 2 - Manual import:
+1. In Grafana, navigate to **Dashboards** → **Import**
+2. Click **Upload JSON file**
+3. Select `grafana/dashboard.json` from this repository
+4. Choose your Prometheus data source (Azure Monitor managed service for Prometheus)
+5. Click **Import**
+
+The dashboard auto-refreshes every 30 seconds and includes:
+- Real-time metrics from all DaemonSet pods
+- Aggregated success/error counts
+- Per-pod breakdown for troubleshooting
+- Rate calculations for performance monitoring
+
+**Custom Queries:**
+
+You can also explore metrics manually in Grafana:
+1. Go to "Explore"
+2. Select the Prometheus data source
+3. Use PromQL queries:
    ```promql
    # Total successful connections
-   cosmos_connection_success_total
+   sum(cosmos_connection_success_total)
    
    # Rate of successful connections per second
    rate(cosmos_connection_success_total[5m])
    
-   # Authentication errors
+   # Authentication errors by pod
    cosmos_auth_error_total
    
    # Error rate
    rate(cosmos_auth_error_total[5m])
    ```
-
-**Viewing All Metrics:**
-- In Grafana, go to "Explore"
-- Select the Prometheus data source
-- Use the metrics browser to discover available metrics
-- Metrics from all pods are automatically aggregated
 
 ### Local Port Forward (Alternative)
 
