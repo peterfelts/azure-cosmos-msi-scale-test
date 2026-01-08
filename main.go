@@ -116,7 +116,7 @@ func performCosmosOperation(accountURL, tableName string) error {
 	
 	if err != nil {
 		log.Printf("Failed to create Managed Identity credential: %v", err)
-		authErrorCounter.Inc()
+		otherErrorCounter.Inc()
 		return fmt.Errorf("failed to create managed identity credential: %w", err)
 	}
 
