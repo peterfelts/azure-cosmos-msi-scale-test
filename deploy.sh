@@ -157,12 +157,22 @@ if [ "$K8S_ONLY" = true ]; then
     fi
     MANAGED_IDENTITY_CLIENT_ID=$(az identity show --resource-group "$RESOURCE_GROUP" --name "$MANAGED_IDENTITY_NAME" --query "clientId" -o tsv)
     
+    # Find Grafana
+    GRAFANA_NAME=$(az grafana list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv)
+    if [ -n "$GRAFANA_NAME" ]; then
+        GRAFANA_URL=$(az grafana show --name "$GRAFANA_NAME" --resource-group "$RESOURCE_GROUP" --query "properties.endpoint" -o tsv)
+    fi
+    
     print_info "Retrieved existing resources:"
     print_info "ACR Name: $ACR_NAME"
     print_info "ACR Login Server: $ACR_LOGIN_SERVER"
     print_info "Cosmos Account: $COSMOS_ACCOUNT_NAME"
     print_info "AKS Cluster: $AKS_CLUSTER_NAME"
     print_info "Managed Identity: $MANAGED_IDENTITY_NAME"
+    if [ -n "$GRAFANA_NAME" ]; then
+        print_info "Grafana Name: $GRAFANA_NAME"
+        print_info "Grafana URL: $GRAFANA_URL"
+    fi
 else
     # Create resource group
     print_info "Creating resource group $RESOURCE_GROUP in $LOCATION..."
@@ -186,6 +196,9 @@ else
     MANAGED_IDENTITY_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.managedIdentityName.value')
     MANAGED_IDENTITY_CLIENT_ID=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.managedIdentityClientId.value')
     AKS_OIDC_ISSUER_URL=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.aksOidcIssuerUrl.value')
+    GRAFANA_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.grafanaName.value')
+    GRAFANA_URL=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.grafanaUrl.value')
+    MONITOR_WORKSPACE_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.monitorWorkspaceName.value')
 
     print_info "Infrastructure deployed successfully!"
     print_info "ACR Name: $ACR_NAME"
@@ -193,6 +206,8 @@ else
     print_info "Cosmos Account: $COSMOS_ACCOUNT_NAME"
     print_info "AKS Cluster: $AKS_CLUSTER_NAME"
     print_info "Managed Identity: $MANAGED_IDENTITY_NAME"
+    print_info "Grafana Name: $GRAFANA_NAME"
+    print_info "Grafana URL: $GRAFANA_URL"
 
     # Build and push Docker image
     print_info "Building Docker image..."
@@ -230,6 +245,10 @@ export COSMOS_ACCOUNT_URL
 export MANAGED_IDENTITY_CLIENT_ID
 envsubst < k8s/deployment.yaml | kubectl apply -f -
 
+# Apply Prometheus scrape configuration
+print_info "Applying Prometheus scrape configuration..."
+kubectl apply -f k8s/prometheus-config.yaml
+
 print_info "Waiting for pods to be ready..."
 kubectl rollout status daemonset/cosmos-msi-scale-test --timeout=5m
 
@@ -240,6 +259,48 @@ print_info "Pod status:"
 kubectl get pods -l app=cosmos-msi-scale-test -o wide
 
 # Display instructions for viewing metrics
+if [ -n "$GRAFANA_URL" ]; then
+cat << EOF
+
+${GREEN}=== Deployment Complete ===${NC}
+
+Azure Managed Grafana is available at:
+    ${GRAFANA_URL}
+
+The Grafana workspace is connected to Azure Monitor for Prometheus.
+Metrics from the cosmos-msi-scale-test pods will automatically be scraped
+and available in Grafana.
+
+To access Grafana:
+1. Navigate to: ${GRAFANA_URL}
+2. Sign in with your Azure credentials
+3. Create a new dashboard or explore metrics
+
+Available metrics:
+- cosmos_connection_success_total
+- cosmos_auth_error_total  
+- cosmos_other_error_total
+
+To view metrics from the pods locally, you can use port-forward:
+
+    kubectl port-forward service/cosmos-msi-scale-test-metrics 8080:8080
+
+Then access metrics at: http://localhost:8080/metrics
+
+To view logs from a pod:
+
+    kubectl logs -l app=cosmos-msi-scale-test --tail=100 -f
+
+To scale the AKS cluster:
+
+    az aks scale --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER_NAME --node-count <desired-count>
+
+To clean up resources:
+
+    az group delete --name $RESOURCE_GROUP --yes --no-wait
+
+EOF
+else
 cat << EOF
 
 ${GREEN}=== Deployment Complete ===${NC}
@@ -263,3 +324,4 @@ To clean up resources:
     az group delete --name $RESOURCE_GROUP --yes --no-wait
 
 EOF
+fi

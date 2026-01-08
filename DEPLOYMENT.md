@@ -12,12 +12,16 @@ This project performs scale testing of Azure Managed Service Identity (MSI) base
 4. **Azure Kubernetes Service (AKS)**: Runs the application with Azure Overlay Networking
 5. **Managed Identity**: Provides authentication for pods to access Cosmos DB
 6. **Prometheus Metrics**: Exposes success/failure metrics for monitoring
+7. **Azure Monitor Workspace**: Collects Prometheus metrics from AKS
+8. **Azure Managed Grafana**: Provides visualization and dashboards for metrics
 
 ### Metrics
 The application exposes the following Prometheus metrics:
 - `cosmos_connection_success_total`: Count of successful Cosmos DB operations
 - `cosmos_auth_error_total`: Count of authentication/authorization errors
 - `cosmos_other_error_total`: Count of other errors
+
+These metrics are automatically scraped by Azure Monitor for Prometheus and can be visualized in Azure Managed Grafana.
 
 ## Prerequisites
 
@@ -131,7 +135,45 @@ Use the `--k8s-only` flag when you want to update or redeploy the Kubernetes man
 
 ## Viewing Metrics
 
-### Port Forward to Local Machine
+### Azure Managed Grafana (Recommended)
+
+After deployment, metrics are automatically collected by Azure Monitor for Prometheus and available in Azure Managed Grafana.
+
+**Access Grafana:**
+1. The deployment script outputs the Grafana URL
+2. Navigate to the URL in your browser
+3. Sign in with your Azure credentials
+4. You'll have access to the Grafana workspace
+
+**Create a Dashboard:**
+1. In Grafana, click "+" and select "Dashboard"
+2. Add a new panel
+3. Select "Prometheus" as the data source
+4. Use PromQL queries to visualize metrics:
+   ```promql
+   # Total successful connections
+   cosmos_connection_success_total
+   
+   # Rate of successful connections per second
+   rate(cosmos_connection_success_total[5m])
+   
+   # Authentication errors
+   cosmos_auth_error_total
+   
+   # Error rate
+   rate(cosmos_auth_error_total[5m])
+   ```
+
+**Viewing All Metrics:**
+- In Grafana, go to "Explore"
+- Select the Prometheus data source
+- Use the metrics browser to discover available metrics
+- Metrics from all pods are automatically aggregated
+
+### Local Port Forward (Alternative)
+
+For quick local access to raw metrics:
+
 ```bash
 kubectl port-forward service/cosmos-msi-scale-test-metrics 8080:8080
 ```
