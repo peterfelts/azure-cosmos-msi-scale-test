@@ -156,6 +156,37 @@ resource cosmosRoleAssignmentReader 'Microsoft.DocumentDB/databaseAccounts/sqlRo
   }
 }
 
+// Custom SQL Role Definition for database write operations
+resource cosmosCustomRoleDef 'Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions@2024-05-15' = {
+  parent: cosmosAccount
+  name: guid(cosmosAccount.id, 'customDbWrite')
+  properties: {
+    roleName: 'Custom Database Write Role'
+    type: 'CustomRole'
+    assignableScopes: [
+      cosmosAccount.id
+    ]
+    permissions: [
+      {
+        dataActions: [
+          'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/write'
+        ]
+      }
+    ]
+  }
+}
+
+// Grant the kubelet managed identity the custom database write role
+resource cosmosCustomRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
+  parent: cosmosAccount
+  name: guid(aksCluster.id, cosmosAccount.id, 'customDbWrite')
+  properties: {
+    roleDefinitionId: cosmosCustomRoleDef.id
+    principalId: aksCluster.properties.identityProfile.kubeletidentity.objectId
+    scope: cosmosAccount.id
+  }
+}
+
 // Azure Monitor Workspace for Prometheus metrics
 resource monitorWorkspace 'Microsoft.Monitor/accounts@2023-04-03' = {
   name: monitorWorkspaceName
