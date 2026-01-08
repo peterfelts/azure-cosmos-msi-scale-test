@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "2006947998789860642"
+      "templateHash": "17016972189964850962"
     }
   },
   "parameters": {
@@ -14,6 +14,13 @@
       "defaultValue": "[resourceGroup().location]",
       "metadata": {
         "description": "Location for all resources"
+      }
+    },
+    "cosmosLocation": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Location for Cosmos DB account (defaults to same as other resources)"
       }
     },
     "namePrefix": {
@@ -51,7 +58,8 @@
     "aksClusterName": "[format('{0}-aks', parameters('namePrefix'))]",
     "managedIdentityName": "[format('{0}-identity', parameters('namePrefix'))]",
     "monitorWorkspaceName": "[format('{0}-monitor-{1}', parameters('namePrefix'), uniqueString(resourceGroup().id))]",
-    "grafanaName": "[format('grf-{0}', uniqueString(resourceGroup().id))]"
+    "grafanaName": "[format('grf-{0}', uniqueString(resourceGroup().id))]",
+    "actualCosmosLocation": "[if(empty(parameters('cosmosLocation')), parameters('location'), parameters('cosmosLocation'))]"
   },
   "resources": [
     {
@@ -70,7 +78,7 @@
       "type": "Microsoft.DocumentDB/databaseAccounts",
       "apiVersion": "2024-05-15",
       "name": "[variables('cosmosAccountName')]",
-      "location": "[parameters('location')]",
+      "location": "[variables('actualCosmosLocation')]",
       "kind": "GlobalDocumentDB",
       "properties": {
         "databaseAccountOfferType": "Standard",

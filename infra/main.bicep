@@ -1,6 +1,9 @@
 @description('Location for all resources')
 param location string = resourceGroup().location
 
+@description('Location for Cosmos DB account (defaults to same as other resources)')
+param cosmosLocation string = ''
+
 @description('Name prefix for resources')
 param namePrefix string = 'cosmosmsiscale'
 
@@ -20,6 +23,7 @@ var aksClusterName = '${namePrefix}-aks'
 var managedIdentityName = '${namePrefix}-identity'
 var monitorWorkspaceName = '${namePrefix}-monitor-${uniqueString(resourceGroup().id)}'
 var grafanaName = 'grf-${uniqueString(resourceGroup().id)}'
+var actualCosmosLocation = empty(cosmosLocation) ? location : cosmosLocation
 
 // Azure Container Registry
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -36,7 +40,7 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
 // Cosmos DB Account with Table API
 resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   name: cosmosAccountName
-  location: location
+  location: actualCosmosLocation
   kind: 'GlobalDocumentDB'
   properties: {
     databaseAccountOfferType: 'Standard'

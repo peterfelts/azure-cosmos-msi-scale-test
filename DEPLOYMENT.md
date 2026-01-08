@@ -75,6 +75,12 @@ The `deploy.sh` script automates the entire deployment process:
   --prefix "mytest" \
   --node-count 5
 
+# Deploy with Cosmos DB in a different region
+./deploy.sh \
+  --subscription-id "your-subscription-id" \
+  --location "eastus" \
+  --cosmos-location "westus2"
+
 # Deploy only Kubernetes manifests (skip ARM deployment)
 ./deploy.sh \
   --subscription-id "your-subscription-id" \
@@ -86,10 +92,25 @@ The `deploy.sh` script automates the entire deployment process:
 - `-s, --subscription-id`: Azure subscription ID (required)
 - `-r, --resource-group`: Resource group name (default: cosmos-msi-scale-test-rg)
 - `-l, --location`: Azure location (default: eastus)
+- `-c, --cosmos-location`: Cosmos DB location (default: same as --location)
 - `-p, --prefix`: Resource name prefix (default: cosmosmsiscale)
 - `-n, --node-count`: Initial AKS node count (default: 3)
 - `-k, --k8s-only`: Deploy Kubernetes manifests only, skip ARM deployment (default: false)
 - `-h, --help`: Display help message
+
+#### Multi-Region Deployment
+
+You can deploy the Cosmos DB account in a different region from the AKS cluster and other resources. This is useful for testing cross-region authentication scenarios:
+
+```bash
+# AKS cluster in East US, Cosmos DB in West US 2
+./deploy.sh \
+  --subscription-id "your-subscription-id" \
+  --location "eastus" \
+  --cosmos-location "westus2"
+```
+
+This configuration allows you to test MSI authentication when the compute (AKS VMSS nodes) and data (Cosmos DB) are in different Azure regions.
 
 #### Kubernetes-Only Deployment Mode
 

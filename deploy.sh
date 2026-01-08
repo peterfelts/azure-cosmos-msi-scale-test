@@ -39,6 +39,7 @@ Required Options:
 Optional Options:
     -r, --resource-group NAME       Resource group name (default: cosmos-msi-scale-test-rg)
     -l, --location LOCATION         Azure location (default: eastus)
+    -c, --cosmos-location LOCATION  Cosmos DB location (default: same as --location)
     -p, --prefix PREFIX             Resource name prefix (default: cosmosmsiscale)
     -n, --node-count COUNT          AKS node count (default: 3)
     -k, --k8s-only                  Deploy Kubernetes manifests only (skip ARM deployment)
@@ -47,6 +48,7 @@ Optional Options:
 Example:
     $0 --subscription-id "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
     $0 -s "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" -r my-rg -l westus2 -n 5
+    $0 -s "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" -l eastus -c westus2  # AKS in eastus, Cosmos in westus2
     $0 -s "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" -k  # Deploy K8s only
 
 EOF
@@ -57,6 +59,7 @@ EOF
 SUBSCRIPTION_ID=""
 RESOURCE_GROUP="cosmos-msi-scale-test-rg"
 LOCATION="eastus"
+COSMOS_LOCATION=""
 NAME_PREFIX="cosmosmsiscale"
 NODE_COUNT=3
 K8S_ONLY=false
@@ -73,6 +76,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -l|--location)
             LOCATION="$2"
+            shift 2
+            ;;
+        -c|--cosmos-location)
+            COSMOS_LOCATION="$2"
             shift 2
             ;;
         -p|--prefix)
@@ -192,12 +199,22 @@ else
 
     # Deploy infrastructure using Bicep
     print_info "Deploying Azure infrastructure..."
-    DEPLOYMENT_OUTPUT=$(az deployment group create \
-        --resource-group "$RESOURCE_GROUP" \
-        --template-file infra/main.bicep \
-        --parameters location="$LOCATION" namePrefix="$NAME_PREFIX" aksNodeCount="$NODE_COUNT" deployerPrincipalId="$DEPLOYER_PRINCIPAL_ID" \
-        --query properties.outputs \
-        --output json)
+    if [ -n "$COSMOS_LOCATION" ]; then
+        print_info "Cosmos DB will be deployed to: $COSMOS_LOCATION"
+        DEPLOYMENT_OUTPUT=$(az deployment group create \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters location="$LOCATION" cosmosLocation="$COSMOS_LOCATION" namePrefix="$NAME_PREFIX" aksNodeCount="$NODE_COUNT" deployerPrincipalId="$DEPLOYER_PRINCIPAL_ID" \
+            --query properties.outputs \
+            --output json)
+    else
+        DEPLOYMENT_OUTPUT=$(az deployment group create \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters location="$LOCATION" namePrefix="$NAME_PREFIX" aksNodeCount="$NODE_COUNT" deployerPrincipalId="$DEPLOYER_PRINCIPAL_ID" \
+            --query properties.outputs \
+            --output json)
+    fi
 
     # Extract outputs
     ACR_NAME=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.acrName.value')
